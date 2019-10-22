@@ -4,7 +4,29 @@ import sys
 import shutil
 import time
 
+class EarlyStopping:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.best_loss = None
+        self.wait = 0
+        self.paitence = cfg.SOLVER.PAITENCE
+        self.converged = False
 
+    def reset(self):
+        self.wait = 0
+        self.paitence = False
+
+    def is_converged(self, val_loss):
+        val_loss = val_loss.meters['val_loss'].avg
+        if self.best_loss is None:
+            self.best_loss = val_loss
+        if self.best_loss < val_loss:
+            if self.wait > self.paitence:
+                self.converged = True
+            else:
+                self.wait += 1
+        else:
+            self.best_loss = val_loss
 
 def setup_logger(name, save_dir, distributed_rank):
     logger = logging.Logger(name)
@@ -25,16 +47,6 @@ def setup_logger(name, save_dir, distributed_rank):
 
     return logger
 
-def early_stopping(losses, paitence):
-    EPS = 1e-4
-    if abs(losses[-1] - losses[-2]) <= EPS:
-        if wait < paitence:
-            wait+=1
-            return wait, -1
-        else:
-            wait = 0
-            return wait, 0
-
 def setup_exp(save_dir, exp_name, clean_run):
     if not os.path.exists(os.path.join(save_dir, exp_name)):
         os.makedirs(os.path.join(save_dir, exp_name))
@@ -48,7 +60,6 @@ def setup_exp(save_dir, exp_name, clean_run):
     if clean_run:
         if os.path.exists(tb_dir):
             shutil.rmtree(tb_dir)
-            time.sleep(60)
         if os.path.exists(log_dir):
             shutil.rmtree(log_dir)
         if os.path.exists(chkpt_dir):
