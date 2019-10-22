@@ -75,17 +75,15 @@ class CoreNetwork(nn.Module):
             # Ignore action till last step
             # _ = self.linear_action(hidden_state)
             # mean: [None, 2]
-            mean = self.linear_location(hidden_state)
-            dist = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean,
-                torch.eye(2))
+            mean = F.tanh(self.linear_location(hidden_state.detach()))
+
             # location: [None, 2]
             self.dist.loc = mean
             location = F.tanh(self.dist.sample())
             #log_p_loc: [None, 1]
             log_p_loc= torch.unsqueeze(self.dist.log_prob(location), 1)
             #baseline: [None, 1]
-            baseline = F.relu(self.baseline_nw(hidden_state))
+            baseline = F.sigmoid(F.relu(self.baseline_nw(hidden_state.detach())))
             #log_p_locs: list of size num_glimpses, (None, 1)
             log_p_locs.append(log_p_loc)
             #baselines: list of size num_glimpses, (None, 1)
