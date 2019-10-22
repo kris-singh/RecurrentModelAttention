@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 from glimpse import GlimpseSensor
+from torch.distributions.multivariate_normal import MultivariateNormal
 
 from config import cfg
 
@@ -49,12 +50,13 @@ class CoreNetwork(nn.Module):
         self.glimpse_network = glimpse_network
         self.input_size = cfg.GLIMPSE_NETWORK.OUT_SIZE
         self.hidden_size = cfg.CORE_NETWORK.HIDDEN_SIZE
-        self.num_glimpses = cfg.CORE_NETWORK.NUM_GLIMPSE
+        self.num_glimpses = cfg.GLIMPSE_NETWORK.NUM_GLIMPSE
         self.num_classes = cfg.DATASET.NUM_CLASSES
         self.rnn = nn.RNNCell(self.input_size, self.hidden_size, bias=True)
         self.baseline_nw = nn.Linear(self.hidden_size, 1)
         self.linear_action = nn.Linear(self.hidden_size, self.num_classes)
         self.linear_location = nn.Linear(self.hidden_size, 2)
+        self.dist = MultivariateNormal(torch.zeros(2), torch.eye(2)+0.17)
 
     def forward(self, img, location):
         """
@@ -78,10 +80,10 @@ class CoreNetwork(nn.Module):
                 mean,
                 torch.eye(2))
             # location: [None, 2]
-            location = dist.sample()
-            location = torch.clamp(location, min=-1.0, max=1.0)
+            self.dist.loc = mean
+            location = F.tanh(self.dist.sample())
             #log_p_loc: [None, 1]
-            log_p_loc= torch.unsqueeze(dist.log_prob(location), 1)
+            log_p_loc= torch.unsqueeze(self.dist.log_prob(location), 1)
             #baseline: [None, 1]
             baseline = F.relu(self.baseline_nw(hidden_state))
             #log_p_locs: list of size num_glimpses, (None, 1)
