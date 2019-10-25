@@ -61,8 +61,8 @@ def get_loader(cfg, type):
     kwargs = {'num_workers': cfg.SYSTEM.NUM_WORKERS, 'pin_memory': cfg.SYSTEM.PIN_MEMORY}
     splits = defaultdict()
     splits['train'] = 0.75
-    size = cfg.TRAIN.DATA.NUM_DATA_POINTS
-    train_data, train_target, val_data, val_target = split_dataset(cfg.TRAIN.DATA.ROOT, size, splits)
+    size = cfg.DATA.NUM_DATA_POINTS
+    train_data, train_target, val_data, val_target = split_dataset(cfg.DATA.ROOT, size, splits)
 
     if type=='train':
         train_dataset = ModMnist(train_data, train_target, transform=transforms.Compose([
@@ -70,8 +70,8 @@ def get_loader(cfg, type):
                        transforms.Normalize((0.1307,), (0.3081,))
                        ]))
         train_loader = torch.utils.data.DataLoader(train_dataset,
-                                                   batch_size=cfg.TRAIN.DATA.BATCH_SIZE,
-                                                   shuffle=True, **kwargs)
+                                                   batch_size=cfg.SOLVER.BATCH_SIZE,
+                                                   shuffle=True, drop_last=True, **kwargs)
         return train_loader
 
     elif type=='val':
@@ -80,8 +80,8 @@ def get_loader(cfg, type):
                        transforms.Normalize((0.1307,), (0.3081,))
                        ]))
         val_loader = torch.utils.data.DataLoader(val_dataset,
-                                                   batch_size=cfg.VAL.BATCH_SIZE,
-                                                   shuffle=True, **kwargs)
+                                                   batch_size=cfg.SOLVER.BATCH_SIZE,
+                                                   shuffle=True, drop_last=True, **kwargs)
         return val_loader
 
     elif type=='test':
@@ -90,4 +90,4 @@ def get_loader(cfg, type):
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.1307,), (0.3081,))
                         ])),
-            batch_size=cfg.TEST.BATCH_SIZE, shuffle=True, **kwargs)
+            batch_size=cfg.SOLVER.BATCH_SIZE, shuffle=True, drop_last=True, **kwargs)

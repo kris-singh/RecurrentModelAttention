@@ -21,7 +21,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
     val_acc = MetricLogger()
     train_loader, val_loader = loader
     wait = 0
-    num_epochs = cfg.TRAIN.NUM_EPOCHS
+    num_epochs = cfg.SOLVER.NUM_EPOCHS
     for epoch_idx in range(0, num_epochs):
         for idx, data in enumerate(train_loader):
             writer_idx = epoch_idx*len(train_loader) + idx
@@ -42,12 +42,12 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             reward = reward.view(len(reward), 1)
             reward = reward.repeat(1, cfg.GLIMPSE_NETWORK.NUM_GLIMPSE)
 
-            baseline_loss = baseline_criterion(baselines, reward) / cfg.TRAIN.BATCH_SIZE
             reinforce_loss = torch.mean((-log_p_locs * (reward - baselines)))
+            baseline_loss = baseline_criterion(baselines, reward.detach()) / cfg.TRAIN.DATA.BATCH_SIZE
             classification_loss = classification_criterion(pred_y, y)
 
             total_loss = baseline_loss + classification_loss + reinforce_loss
-            accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.TRAIN.BATCH_SIZE * 1.0)
+            accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.TRAIN.DATA.BATCH_SIZE * 1.0)
 
             # logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, CLoss: {classification_loss}, Acc:{accuracy}')
             if idx % cfg.SYSTEM.LOG_FREQ == 0:
@@ -122,10 +122,8 @@ if __name__ == "__main__":
 
     glimpse_network = GlimpseNetwork(cfg)
     model = CoreNetwork(cfg, glimpse_network)
-    opt_params = cfg.TRAIN.OPTIMIZER[cfg.TRAIN.OPTIMIZER.NAME.upper()]
-    schd_params = cfg.TRAIN.SCHEDULER[cfg.TRAIN.SCHEDULER.NAME.upper()]
-    optimizer = getattr(torch.optim, cfg.TRAIN.OPTIMIZER.NAME)(model.parameters(), **opt_params)
-    scheduler = getattr(torch.optim.lr_scheduler, cfg.TRAIN.SCHEDULER.NAME)(optimizer, **schd_params)
+    optimizer = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=cfg.SOLVER.WEIGHT_DECAY, betas=cfg.SOLVER.BETAS)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=cfg.SOLVER.STEP_SIZE)
     chkpt = Checkpointer(model, optimizer, scheduler, chkpt_dir, save_to_disk=True, logger=logger)
 
     train_loader= get_loader(cfg, 'train')
