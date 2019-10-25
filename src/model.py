@@ -15,7 +15,6 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 
 from config import cfg
 
-
 class GlimpseNetwork(torch.nn.Module):
     def __init__(self, cfg):
         super(GlimpseNetwork, self).__init__()
@@ -51,12 +50,13 @@ class CoreNetwork(nn.Module):
         self.input_size = cfg.GLIMPSE_NETWORK.OUT_SIZE
         self.hidden_size = cfg.CORE_NETWORK.HIDDEN_SIZE
         self.num_glimpses = cfg.GLIMPSE_NETWORK.NUM_GLIMPSE
-        self.num_classes = cfg.DATASET.NUM_CLASSES
-        self.rnn = nn.RNNCell(self.input_size, self.hidden_size, bias=True)
+        self.num_classes = cfg.DATA.NUM_CLASSES
+        self.rnn = nn.RNNCell(self.input_size, self.hidden_size, bias=False, nonlinearity='relu')
         self.baseline_nw = nn.Linear(self.hidden_size, 1)
         self.linear_action = nn.Linear(self.hidden_size, self.num_classes)
         self.linear_location = nn.Linear(self.hidden_size, 2)
         self.dist = MultivariateNormal(torch.zeros(2), torch.eye(2)+0.17)
+
 
     def forward(self, img, location):
         """
@@ -66,7 +66,7 @@ class CoreNetwork(nn.Module):
         location: location inside the image. [None, 2]
         """
         log_p_locs, baselines=[], []
-        hidden_state = torch.randn(img.shape[0], self.hidden_size)
+        hidden_state = torch.zeros(cfg.SOLVER.BATCH_SIZE, self.hidden_size)
         # hidden_state: [None, rnn_hidden_size]
         for i in range(0, self.num_glimpses):
             x = self.glimpse_network(img, location)
@@ -83,15 +83,16 @@ class CoreNetwork(nn.Module):
             #log_p_loc: [None, 1]
             log_p_loc= torch.unsqueeze(self.dist.log_prob(location), 1)
             #baseline: [None, 1]
-            baseline = F.sigmoid(F.relu(self.baseline_nw(hidden_state.detach())))
+            baseline = F.relu(self.baseline_nw(hidden_state.detach()))
             #log_p_locs: list of size num_glimpses, (None, 1)
             log_p_locs.append(log_p_loc)
             #baselines: list of size num_glimpses, (None, 1)
             baselines.append(baseline)
 
         action = F.softmax(self.linear_action(hidden_state), dim=1)
-        log_p_locs = torch.stack(log_p_locs, 2)
-        baselines = torch.stack(baselines, 2)
+        print(f"Grad:{self.linear_action.weight.grad}")
+        log_p_locs = torch.stack(log_p_locs, 2).squeeze(dim=1)
+        baselines = torch.stack(baselines, 2).squeeze(dim=1)
         return action, log_p_locs, baselines
 
 

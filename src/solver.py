@@ -3,7 +3,8 @@
 import argparse
 
 import torch
-from torch.optim import Adam
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils import tensorboard
 
 from config import cfg
@@ -27,27 +28,26 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             writer_idx = epoch_idx*len(train_loader) + idx
             x = data[0]
             y = data[1]
-            init_loc = (0, 0)
-            loc = torch.tensor(init_loc).type(torch.float).unsqueeze(dim=0)
-            loc = loc.repeat(x.shape[0], 1)
+            init_loc = torch.FloatTensor(1, 2).uniform_(-1, +1)
+            loc = init_loc.repeat(x.shape[0], 1)
             init_hidden = torch.zeros(x.shape[0], cfg.CORE_NETWORK.HIDDEN_SIZE)
             log_p_locs = []
             baselines = []
-            classification_criterion = torch.nn.NLLLoss()
+            classification_criterion = torch.nn.CrossEntropyLoss()
             baseline_criterion = torch.nn.MSELoss()
             pred_y, log_p_locs, baselines = model(x, loc)
-            baselines = torch.squeeze(baselines)
 
             reward = torch.tensor([1 if torch.argmax(pred_y[i]) == y[i] else 0 for i in range(0, len(pred_y))], dtype=torch.float)
             reward = reward.view(len(reward), 1)
             reward = reward.repeat(1, cfg.GLIMPSE_NETWORK.NUM_GLIMPSE)
-
-            reinforce_loss = torch.mean((-log_p_locs * (reward - baselines)))
-            baseline_loss = baseline_criterion(baselines, reward.detach()) / cfg.TRAIN.DATA.BATCH_SIZE
+            baseline_loss = baseline_criterion(baselines, reward.detach()) / cfg.SOLVER.BATCH_SIZE
+            reinforce_loss = torch.mean((-log_p_locs * (reward - baselines.detach())))
             classification_loss = classification_criterion(pred_y, y)
+            print(torch.argmax(pred_y, axis=1))
 
-            total_loss = baseline_loss + classification_loss + reinforce_loss
-            accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.TRAIN.DATA.BATCH_SIZE * 1.0)
+            # total_loss = baseline_loss + classification_loss + reinforce_loss
+            total_loss = classification_loss
+            accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.SOLVER.BATCH_SIZE * 1.0)
 
             # logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, CLoss: {classification_loss}, Acc:{accuracy}')
             if idx % cfg.SYSTEM.LOG_FREQ == 0:
@@ -61,7 +61,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             writer.add_scalar('acc', accuracy, writer_idx)
 
             optimizer.zero_grad()
-            total_loss.backward()
+            total_loss.backward(retain_graph=True)
             optimizer.step()
 
         # validate(cfg, model, val_loader, writer_idx, val_loss, val_acc)
@@ -70,7 +70,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
         #     logger.info(f'Loss Converged, Early Stopping')
         #     logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, Train Loss: {total_loss}, Train Acc:{accuracy}, Val Loss: {val_loss}')
         #     break;
-        scheduler.step(total_loss)
+        scheduler.step()
         chkpt.save(f'epoch_{epoch_idx}')
 
 
@@ -92,25 +92,29 @@ def validate(cfg, model, val_loader, writer_idx, val_loss, val_acc):
         baseline_loss = baseline_criterion(baselines, reward)
         reinforce_loss = torch.mean(torch.sum(-log_p_locs * (reward - baselines)))
         classification_loss = classification_criterion(pred_y, y)
-        total_loss += (reinforce_loss + baseline_loss + classification_loss) / cfg.VAL.BATCH_SIZE
+        total_loss += (reinforce_loss + baseline_loss + classification_loss) / cfg.SOLVER.BATCH_SIZE
         val_loss.update(**{'val_loss': total_loss})
-        accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / cfg.VAL.BATCH_SIZE
+        accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.SOLVER.BATCH_SIZE * 1.0)
         val_acc.update(**{'val_acc': accuracy})
         logger.info(f'Batch:{idx}, Val Loss: {total_loss}, Val Acc:{accuracy}')
         writer.add_scalar('val_loss', total_loss, writer_idx)
         writer.add_scalar('val_acc', accuracy, writer_idx)
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_loc", type=tuple, default=(0, 0))
     parser.add_argument("--clean_run", type=bool, default=True)
+    parser.add_argument("--config_file", type=str, default='../configs/exp1.yaml')
     parser.add_argument("--opts", nargs='*')
     args = parser.parse_args()
     opts = args.opts
+    if args.config_file:
+        cfg.merge_from_file(args.config_file)
     if opts:
         cfg.merge_from_list(opts)
+
+    cfg.freeze()
 
     chkpt_dir, log_dir, tb_dir = setup_exp(cfg.SYSTEM.SAVE_ROOT, cfg.SYSTEM.EXP_NAME, args.clean_run)
     print(f'chkpr_dir:{chkpt_dir}, log_dir:{log_dir}, tb_dir:{tb_dir}')
