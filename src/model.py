@@ -75,11 +75,11 @@ class CoreNetwork(nn.Module):
             # Ignore action till last step
             # _ = self.linear_action(hidden_state)
             # mean: [None, 2]
-            mean = F.tanh(self.linear_location(hidden_state.detach()))
+            mean = torch.tanh(self.linear_location(hidden_state))
 
             # location: [None, 2]
             self.dist.loc = mean
-            location = F.tanh(self.dist.sample())
+            location = torch.tanh(self.dist.sample())
             #log_p_loc: [None, 1]
             log_p_loc= torch.unsqueeze(self.dist.log_prob(location), 1)
             #baseline: [None, 1]
