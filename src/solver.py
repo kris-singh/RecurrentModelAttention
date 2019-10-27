@@ -10,7 +10,7 @@ from torch.utils import tensorboard
 from config import cfg
 from model import CoreNetwork, GlimpseNetwork
 from small_dataset import get_loader
-from utils.basic import early_stopping, setup_exp, setup_logger
+from utils.basic import EarlyStopping, setup_exp, setup_logger
 from utils.checkpoint import Checkpointer
 from utils.meter import MetricLogger
 
@@ -20,6 +20,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
     acc_logger = MetricLogger()
     val_loss = MetricLogger()
     val_acc = MetricLogger()
+    early_stopping = EarlyStopping(cfg)
     train_loader, val_loader = loader
     wait = 0
     num_epochs = cfg.SOLVER.NUM_EPOCHS
@@ -37,7 +38,6 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             classification_criterion = torch.nn.NLLLoss()
             baseline_criterion = torch.nn.MSELoss()
             pred_y, log_p_locs, baselines = model(x, loc)
-
             reward = torch.tensor([1 if torch.argmax(pred_y[i]) == y[i] else 0 for i in range(0, len(pred_y))], dtype=torch.float)
             print(f"Argmax: {torch.argmax(pred_y, 1)}")
             print(f"GT: {y}")
@@ -64,14 +64,16 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
+            print("--------------------------BATCH ENDED-----------------------------")
+            # import ipdb; ipdb.set_trace()
 
-        # validate(cfg, model, val_loader, writer_idx, val_loss, val_acc)
-        # wait, cgt = early_stopping(cfg, val_loss, wait)
-        # if cgt==0:
-        #     logger.info(f'Loss Converged, Early Stopping')
-        #     logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, Train Loss: {total_loss}, Train Acc:{accuracy}, Val Loss: {val_loss}')
-        #     break;
-        scheduler.step()
+        validate(cfg, model, val_loader, writer, writer_idx, val_loss, val_acc)
+        early_stopping.is_converged(val_loss)
+        if early_stopping.converged:
+            logger.info(f'Loss Converged, Early Stopping')
+            logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, Train Loss: {total_loss}, Train Acc:{accuracy}, Val Loss: {val_loss}')
+            return;
+        # scheduler.step()
         chkpt.save(f'epoch_{epoch_idx}')
 
 
