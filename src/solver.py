@@ -34,7 +34,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             init_hidden = torch.zeros(x.shape[0], cfg.CORE_NETWORK.HIDDEN_SIZE)
             log_p_locs = []
             baselines = []
-            classification_criterion = torch.nn.CrossEntropyLoss()
+            classification_criterion = torch.nn.NLLLoss()
             baseline_criterion = torch.nn.MSELoss()
             pred_y, log_p_locs, baselines = model(x, loc)
 
@@ -44,11 +44,11 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             reward = reward.view(len(reward), 1)
             reward = reward.repeat(1, cfg.GLIMPSE_NETWORK.NUM_GLIMPSE)
             baseline_loss = baseline_criterion(baselines, reward.detach()) / cfg.SOLVER.BATCH_SIZE
-            reinforce_loss = torch.mean((-log_p_locs * (reward - baselines.detach())))
+            reinforce_loss = torch.mean((-log_p_locs * (baselines.detach() - reward)))
             classification_loss = classification_criterion(pred_y, y)
             print(f'Classification Loss: {classification_loss}, Reinforce Loss: {reinforce_loss}, Baseline Loss: {baseline_loss}')
 
-            # total_loss = baseline_loss + classification_loss + reinforce_loss
+            total_loss = baseline_loss + classification_loss + reinforce_loss
             total_loss = classification_loss
             accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.SOLVER.BATCH_SIZE * 1.0)
 
@@ -62,7 +62,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             writer.add_scalar('acc', accuracy, writer_idx)
 
             optimizer.zero_grad()
-            total_loss.backward(retain_graph=True)
+            total_loss.backward()
             optimizer.step()
 
         # validate(cfg, model, val_loader, writer_idx, val_loss, val_acc)
@@ -91,7 +91,7 @@ def validate(cfg, model, val_loader, writer_idx, val_loss, val_acc):
         reward = reward.view(len(reward), 1)
         reward = reward.repeat(1, cfg.GLIMPSE_NETWORK.NUM_GLIMPSE)
         baseline_loss = baseline_criterion(baselines, reward)
-        reinforce_loss = torch.mean(torch.sum(-log_p_locs * (reward - baselines)))
+        reinforce_loss = torch.mean(-log_p_locs * (baselines - reward))
         classification_loss = classification_criterion(pred_y, y)
         total_loss += (reinforce_loss + baseline_loss + classification_loss) / cfg.SOLVER.BATCH_SIZE
         val_loss.update(**{'val_loss': total_loss})

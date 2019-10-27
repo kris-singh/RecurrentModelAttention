@@ -124,8 +124,7 @@ class CoreNetwork(nn.Module):
             #baselines: list of size num_glimpses, (None, 1)
             baselines.append(baseline)
 
-        action = F.softmax(self.linear_action(hidden_state), dim=1)
-        print(f"Grad:{self.linear_action.weight.grad}")
+        action = F.log_softmax(self.linear_action(hidden_state), dim=1)
         log_p_locs = torch.stack(log_p_locs, 2).squeeze(dim=1)
         baselines = torch.stack(baselines, 2).squeeze(dim=1)
         if self.rnn.weight_ih.grad is not None:
