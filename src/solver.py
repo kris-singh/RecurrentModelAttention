@@ -77,7 +77,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
         chkpt.save(f'epoch_{epoch_idx}')
 
 
-def validate(cfg, model, val_loader, writer_idx, val_loss, val_acc):
+def validate(cfg, model, val_loader, writer, writer_idx, val_loss, val_acc):
     total_loss = 0
     model.eval()
     for idx, data in enumerate(val_loader):
