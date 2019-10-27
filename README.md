@@ -19,7 +19,7 @@ src
 ---
 Results for small dataset of 100 images.
 Training Accuracy reached 100% indicating that the model is able to overfit a small dataset
-![Training Loss and Accuracy]("results/training_small.png")
+![](results/training_small.png)
 Training Accuracy reached 100% on validation set
-![Validation Loss and Accuracy]("results/validataion_small.png")
+![](results/validation_small.png)
 
