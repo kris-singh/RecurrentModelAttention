@@ -15,6 +15,31 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 
 from config import cfg
 
+
+class BackwardFnc:
+    def __init__(self):
+        self.idx = 0
+    def backward_fnc(self, m, i, o):
+        print("=============Backward=========================")
+        print(f"Module:{m}")
+        self.idx +=1
+        print(f"Backward called {self.idx}")
+        print("----------------------------------------------")
+
+class ForwardFnc:
+    def __init__(self):
+        self.idx = 0
+    def forward_fnc(self, m, i, o):
+        print("----------------Forward---------------------")
+        print(f"Module: {m}")
+        self.idx +=1
+        print(f"Forward called {self.idx}")
+        print("----------------------------------------------")
+
+
+backward = BackwardFnc()
+forward = ForwardFnc()
+
 class GlimpseNetwork(torch.nn.Module):
     def __init__(self, cfg):
         super(GlimpseNetwork, self).__init__()
@@ -56,6 +81,16 @@ class CoreNetwork(nn.Module):
         self.linear_action = nn.Linear(self.hidden_size, self.num_classes)
         self.linear_location = nn.Linear(self.hidden_size, 2)
         self.dist = MultivariateNormal(torch.zeros(2), torch.eye(2)+0.17)
+        self.glimpse_network.register_backward_hook(backward.backward_fnc)
+        self.glimpse_network.register_forward_hook(forward.forward_fnc)
+        self.rnn.register_forward_hook(forward.forward_fnc)
+        self.rnn.register_backward_hook(backward.backward_fnc)
+        self.baseline_nw.register_forward_hook(forward.forward_fnc)
+        self.baseline_nw.register_backward_hook(backward.backward_fnc)
+        self.linear_action.register_forward_hook(forward.forward_fnc)
+        self.linear_action.register_backward_hook(backward.backward_fnc)
+        self.linear_location.register_forward_hook(forward.forward_fnc)
+        self.linear_location.register_backward_hook(backward.backward_fnc)
 
 
     def forward(self, img, location):
@@ -93,6 +128,11 @@ class CoreNetwork(nn.Module):
         print(f"Grad:{self.linear_action.weight.grad}")
         log_p_locs = torch.stack(log_p_locs, 2).squeeze(dim=1)
         baselines = torch.stack(baselines, 2).squeeze(dim=1)
+        if self.rnn.weight_ih.grad is not None:
+            print("Grad Norm i2h", torch.norm(self.rnn.weight_ih.grad))
+        if self.rnn.weight_hh.grad is not None:
+            print("Grad Norm h2h", torch.norm(self.rnn.weight_hh.grad))
+        print(f"Grad norm linear action {torch.norm(self.linear_action.weight)}")
         return action, log_p_locs, baselines
 
 

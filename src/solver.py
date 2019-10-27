@@ -25,6 +25,7 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
     num_epochs = cfg.SOLVER.NUM_EPOCHS
     for epoch_idx in range(0, num_epochs):
         for idx, data in enumerate(train_loader):
+            print("--------------------------BATCH STARTED-----------------------------")
             writer_idx = epoch_idx*len(train_loader) + idx
             x = data[0]
             y = data[1]
@@ -38,20 +39,20 @@ def train(cfg, model, loader, optimizer, scheduler, writer):
             pred_y, log_p_locs, baselines = model(x, loc)
 
             reward = torch.tensor([1 if torch.argmax(pred_y[i]) == y[i] else 0 for i in range(0, len(pred_y))], dtype=torch.float)
+            print(f"Argmax: {torch.argmax(pred_y, 1)}")
+            print(f"GT: {y}")
             reward = reward.view(len(reward), 1)
             reward = reward.repeat(1, cfg.GLIMPSE_NETWORK.NUM_GLIMPSE)
             baseline_loss = baseline_criterion(baselines, reward.detach()) / cfg.SOLVER.BATCH_SIZE
             reinforce_loss = torch.mean((-log_p_locs * (reward - baselines.detach())))
             classification_loss = classification_criterion(pred_y, y)
-            print(torch.argmax(pred_y, axis=1))
+            print(f'Classification Loss: {classification_loss}, Reinforce Loss: {reinforce_loss}, Baseline Loss: {baseline_loss}')
 
             # total_loss = baseline_loss + classification_loss + reinforce_loss
             total_loss = classification_loss
             accuracy = torch.sum(torch.argmax(pred_y, 1)==y) / (cfg.SOLVER.BATCH_SIZE * 1.0)
 
-            # logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, CLoss: {classification_loss}, Acc:{accuracy}')
             if idx % cfg.SYSTEM.LOG_FREQ == 0:
-                print()
                 logger.info(f'Epoch: {epoch_idx}, Batch:{idx}, Loss: {total_loss}, Acc:{accuracy}')
                 pass
 
